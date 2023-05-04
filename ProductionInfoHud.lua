@@ -252,6 +252,106 @@ function ProductionInfoHud:createProductionNeedingTable(mode)
 	local farmId = g_currentMission.player.farmId;
 	local myFillTypes = {} -- filltypeId is key for finding and adding, change later to sortable
 	
+			-- Animals Start
+			for _, placeable in pairs(g_currentMission.husbandrySystem.placeables) do
+				if placeable.ownerFarmId == farmId then
+					if placeable.spec_husbandryMilk ~= nil then
+						if myFillTypes[placeable.spec_husbandryMilk.fillType] == nil then
+							myFillTypes[placeable.spec_husbandryMilk.fillType] = createEmptyFilltype(placeable.spec_husbandryMilk.fillType);
+						end
+						local fillTypeItem = myFillTypes[placeable.spec_husbandryMilk.fillType];
+						local producedPerMonth = (placeable.spec_husbandryMilk.litersPerHour * 24) * factor;
+						fillTypeItem.producedPerMonth = fillTypeItem.producedPerMonth + producedPerMonth;
+						fillTypeItem.producedPerMonthWithBooster = fillTypeItem.producedPerMonthWithBooster + producedPerMonth;
+						fillTypeItem.keepPerMonth = fillTypeItem.keepPerMonth + producedPerMonth;
+						fillTypeItem.keepPerMonthWithBooster = fillTypeItem.keepPerMonthWithBooster + producedPerMonth
+					end
+					if placeable.spec_husbandryPallets ~= nil then
+						if myFillTypes[placeable.spec_husbandryPallets.fillTypeIndex] == nil then
+							myFillTypes[placeable.spec_husbandryPallets.fillTypeIndex] = createEmptyFilltype(placeable.spec_husbandryPallets.fillTypeIndex);
+						end
+						local fillTypeItem = myFillTypes[placeable.spec_husbandryPallets.fillTypeIndex];
+						local producedPerMonth = (placeable.spec_husbandryPallets.litersPerHour * 24) * factor;
+						fillTypeItem.producedPerMonth = fillTypeItem.producedPerMonth + producedPerMonth;
+						fillTypeItem.producedPerMonthWithBooster = fillTypeItem.producedPerMonthWithBooster + producedPerMonth;
+						fillTypeItem.keepPerMonth = fillTypeItem.keepPerMonth + producedPerMonth;
+						fillTypeItem.keepPerMonthWithBooster = fillTypeItem.keepPerMonthWithBooster + producedPerMonth
+					end
+					if placeable.spec_husbandryStraw ~= nil then
+						if myFillTypes[placeable.spec_husbandryStraw.outputFillType] == nil then
+							myFillTypes[placeable.spec_husbandryStraw.outputFillType] = createEmptyFilltype(placeable.spec_husbandryStraw.outputFillType);
+						end
+						local fillTypeItem = myFillTypes[placeable.spec_husbandryStraw.outputFillType];
+						local producedPerMonth = (placeable.spec_husbandryStraw.outputLitersPerHour * 24) * factor;
+						fillTypeItem.producedPerMonth = fillTypeItem.producedPerMonth + producedPerMonth;
+						fillTypeItem.producedPerMonthWithBooster = fillTypeItem.producedPerMonthWithBooster + producedPerMonth;
+						fillTypeItem.keepPerMonth = fillTypeItem.keepPerMonth + producedPerMonth;
+						fillTypeItem.keepPerMonthWithBooster = fillTypeItem.keepPerMonthWithBooster + producedPerMonth
+		
+						if myFillTypes[placeable.spec_husbandryStraw.inputFillType] == nil then
+							myFillTypes[placeable.spec_husbandryStraw.inputFillType] = createEmptyFilltype(placeable.spec_husbandryStraw.inputFillType);
+						end
+						local fillTypeItem = myFillTypes[placeable.spec_husbandryStraw.inputFillType];
+						local usagePerMonth = (placeable.spec_husbandryStraw.inputLitersPerHour * 24) * factor;
+						fillTypeItem.usagePerMonth = fillTypeItem.usagePerMonth + usagePerMonth;
+					end
+					if placeable.spec_husbandryLiquidManure ~= nil then
+						if myFillTypes[placeable.spec_husbandryLiquidManure.fillType] == nil then
+							myFillTypes[placeable.spec_husbandryLiquidManure.fillType] = createEmptyFilltype(placeable.spec_husbandryLiquidManure.fillType);
+						end
+						local fillTypeItem = myFillTypes[placeable.spec_husbandryLiquidManure.fillType];
+						local producedPerMonth = (placeable.spec_husbandryLiquidManure.litersPerHour * 24) * factor;
+						fillTypeItem.producedPerMonth = fillTypeItem.producedPerMonth + producedPerMonth;
+						fillTypeItem.producedPerMonthWithBooster = fillTypeItem.producedPerMonthWithBooster + producedPerMonth;
+						fillTypeItem.keepPerMonth = fillTypeItem.keepPerMonth + producedPerMonth;
+						fillTypeItem.keepPerMonthWithBooster = fillTypeItem.keepPerMonthWithBooster + producedPerMonth
+					end
+					if placeable.spec_husbandryWater ~= nil then
+						if myFillTypes[placeable.spec_husbandryWater.fillType] == nil then
+							myFillTypes[placeable.spec_husbandryWater.fillType] = createEmptyFilltype(placeable.spec_husbandryWater.fillType);
+						end
+						local fillTypeItem = myFillTypes[placeable.spec_husbandryWater.fillType];
+						local usagePerMonth = (placeable.spec_husbandryWater.litersPerHour * 24) * factor;
+						fillTypeItem.usagePerMonth = fillTypeItem.usagePerMonth + usagePerMonth;
+					end
+		
+					if placeable.spec_husbandryFood ~= nil then
+						if placeable.spec_husbandryFood.supportedFillTypes[FillType.PIGFOOD] then
+							if myFillTypes[FillType.PIGFOOD] == nil then
+								myFillTypes[FillType.PIGFOOD] = createEmptyFilltype(FillType.PIGFOOD);
+							end
+							local fillTypeItem = myFillTypes[FillType.PIGFOOD];
+							local usagePerMonth = (placeable.spec_husbandryFood.litersPerHour * 24) * factor;
+							fillTypeItem.usagePerMonth = fillTypeItem.usagePerMonth + usagePerMonth;
+						else
+							for key, value in pairs(placeable.spec_husbandryFood.fillLevels) do
+								if value > 0 then
+									if myFillTypes[key] == nil then
+										myFillTypes[key] = createEmptyFilltype(key);
+									end
+									local fillTypeItem = myFillTypes[key];
+									local usagePerMonth = (placeable.spec_husbandryFood.litersPerHour * 24) * factor;
+									fillTypeItem.usagePerMonth = fillTypeItem.usagePerMonth + usagePerMonth;
+								end
+							end
+						end
+					end
+		
+					if placeable.spec_husbandryFeedingRobot ~= nil then
+						local usagePerHour = placeable.spec_husbandryFood.litersPerHour
+						for _,ingredient in pairs(placeable.spec_husbandryFeedingRobot.feedingRobot.robot.recipe.ingredients) do
+							local fType = ingredient.fillTypes[1]
+							if myFillTypes[fType] == nil then
+								myFillTypes[fType] = createEmptyFilltype(fType);
+							end
+							local fillTypeItem = myFillTypes[fType];
+							local usagePerMonth = ((usagePerHour * ingredient.ratio) * 24) * factor;
+							fillTypeItem.usagePerMonth = fillTypeItem.usagePerMonth + usagePerMonth;
+						end
+					end
+				end
+			end
+		-- Animals End
 	-- productions
 	if g_currentMission.productionChainManager.farmIds[farmId] ~= nil and g_currentMission.productionChainManager.farmIds[farmId].productionPoints ~= nil then
 		for _, productionPoint in pairs(g_currentMission.productionChainManager.farmIds[farmId].productionPoints) do
@@ -364,6 +464,31 @@ function ProductionInfoHud:createProductionNeedingTable(mode)
 	ProductionInfoHud.fillTypeResultTable = fillTypeResultTable;
 end
 
+function createEmptyFilltype(fID)
+    local fillTypeItem = {};
+    fillTypeItem.fillTypeId = fID;
+    fillTypeItem.usagePerMonth = 0;
+	fillTypeItem.producedPerMonth = 0;
+	fillTypeItem.producedPerMonthWithBooster = 0;
+	fillTypeItem.sellPerMonth = 0;
+	fillTypeItem.sellPerMonthWithBooster = 0;
+	fillTypeItem.keepPerMonth = 0;
+	fillTypeItem.keepPerMonthWithBooster = 0;
+	fillTypeItem.distributePerMonth = 0;
+	fillTypeItem.distributePerMonthWithBooster = 0;
+    local filltype = g_fillTypeManager.fillTypes[fID]
+    fillTypeItem.fillTypeTitle = filltype.title;
+    fillTypeItem.hudOverlayFilename = filltype.hudOverlayFilename;
+    local fruitDesc = g_fruitTypeManager:getFruitTypeByFillTypeIndex(fID);
+    if fruitDesc ~= nil and mode == InGameMenuProductionInfo.MODE_YEAR and fID ~= FillType.STRAW then
+        if fruitDesc.windrowName == "ALFALFA_WINDROW" or fruitDesc.windrowName == "GRASS_WINDROW" then
+            fillTypeItem.literPerSqm = g_fruitTypeManager:getFillTypeLiterPerSqm(fID, 1);
+        else
+            fillTypeItem.literPerSqm = fruitDesc.literPerSqm;
+        end
+    end
+    return fillTypeItem;
+end
 function compFillTypeResultTable(w1,w2)
 	-- Zum Sortieren der Ausgabeliste nach Zeit
 	if w1.fillTypeTitle == w2.fillTypeTitle and w1.fillTypeId < w2.fillTypeId then
