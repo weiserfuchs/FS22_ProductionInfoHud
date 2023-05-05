@@ -356,7 +356,21 @@ function ProductionInfoHud:createProductionNeedingTable(mode)
 	if g_currentMission.productionChainManager.farmIds[farmId] ~= nil and g_currentMission.productionChainManager.farmIds[farmId].productionPoints ~= nil then
 		for _, productionPoint in pairs(g_currentMission.productionChainManager.farmIds[farmId].productionPoints) do
 			local numActiveProductions = #productionPoint.activeProductions
-			
+			local animalRecipes = {};
+				if productionPoint.animalTypes ~= nil then
+					for _, animalType in pairs(productionPoint.animalTypes) do
+						for _, recipe in ipairs(animalType.recipe) do
+							local aRecipe = {};
+							aRecipe.fillTypeId = recipe.fillTypeIndex;
+							aRecipe.minAge = recipe.minAge;
+							aRecipe.maxAge = recipe.maxAge;
+							aRecipe.smallestAmount = recipe.smallestAmount;
+							aRecipe.biggestAmount = recipe.biggestAmount;
+							animalRecipes[recipe.fillTypeIndex] = aRecipe;
+							--print("fillTypeIndex " .. recipe.fillTypeIndex .. " minAge " .. recipe.minAge .. " maxAge " .. recipe.maxAge .. " smallestAmount " .. recipe.smallestAmount .. " biggestAmount " .. recipe.biggestAmount);
+						end
+					end
+				end
 			for fillTypeId, fillLevel in pairs(productionPoint.storage.fillLevels) do
 				-- neu erstellen, wenn nicht da
 				if myFillTypes[fillTypeId] == nil then
@@ -383,12 +397,11 @@ function ProductionInfoHud:createProductionNeedingTable(mode)
 							fillTypeItem.literPerSqm = fruitDesc.literPerSqm;
 						end
 					end
-					
 					myFillTypes[fillTypeId] = fillTypeItem;
 				end
 				local fillTypeItem = myFillTypes[fillTypeId];
 				
-				for _, production in pairs(productionPoint.activeProductions) do
+					for _, production in pairs(productionPoint.activeProductions) do
 					-- berechnen des yearFactor wenn notwendig
 					local yearFactor = 1
 						if mode == InGameMenuProductionInfo.MODE_YEAR then
@@ -404,7 +417,17 @@ function ProductionInfoHud:createProductionNeedingTable(mode)
 				
 					for _, input in pairs(production.inputs) do
 						if input.type == fillTypeId then
-							fillTypeItem.usagePerMonth = fillTypeItem.usagePerMonth + (production.cyclesPerMonth * input.amount) * factor / (productionPoint.sharedThroughputCapacity and numActiveProductions or 1) * yearFactor;
+							if animalRecipes[input.type] ~= nil then
+								fillTypeItem.sellPerMonth = animalRecipes[input.type].minAge
+								fillTypeItem.sellPerMonthWithBooster = animalRecipes[input.type].minAge
+								fillTypeItem.keepPerMonth = fillTypeItem.usagePerMonth + ((production.cyclesPerMonth * input.amount)/animalRecipes[input.type].smallestAmount) * factor / (productionPoint.sharedThroughputCapacity and numActiveProductions or 1) * yearFactor;
+								fillTypeItem.keepPerMonthWithBooster = fillTypeItem.usagePerMonth + ((production.cyclesPerMonth * input.amount)/animalRecipes[input.type].smallestAmount) * factor / (productionPoint.sharedThroughputCapacity and numActiveProductions or 1) * yearFactor;
+								fillTypeItem.distributePerMonth = animalRecipes[input.type].maxAge
+								fillTypeItem.distributePerMonthWithBooster = animalRecipes[input.type].maxAge
+								fillTypeItem.usagePerMonth = fillTypeItem.usagePerMonth + ((production.cyclesPerMonth * input.amount)/animalRecipes[input.type].biggestAmount) * factor / (productionPoint.sharedThroughputCapacity and numActiveProductions or 1) * yearFactor;
+							else
+								fillTypeItem.usagePerMonth = fillTypeItem.usagePerMonth + (production.cyclesPerMonth * input.amount) * factor / (productionPoint.sharedThroughputCapacity and numActiveProductions or 1) * yearFactor;
+							end 
 						end
 					end
 					
