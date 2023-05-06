@@ -358,12 +358,21 @@ function ProductionInfoHud:createProductionNeedingTable(mode)
 			local numActiveProductions = #productionPoint.activeProductions
 			local animalRecipes = {};
 				if productionPoint.animalTypes ~= nil then
-					for _, animalType in pairs(productionPoint.animalTypes) do
+					for animalName, animalType in pairs(productionPoint.animalTypes) do
 						for _, recipe in ipairs(animalType.recipe) do
+							local tmpAge = 0;
+							for key, weight in pairs(animalType.weight) do
+								if recipe.biggestAmount == weight then
+									tmpAge = key;
+									break;
+								end
+							end
+
 							local aRecipe = {};
 							aRecipe.fillTypeId = recipe.fillTypeIndex;
 							aRecipe.minAge = recipe.minAge;
-							aRecipe.maxAge = recipe.maxAge;
+							aRecipe.maxAge = (tmpAge + (recipe.maxAge/100));
+							--print("Name " .. animalName .. " tmpAge " .. tmpAge .. " maxAge/100 " .. (recipe.maxAge/100) .. " aRecipe.maxAge " .. aRecipe.maxAge);
 							aRecipe.smallestAmount = recipe.smallestAmount;
 							aRecipe.biggestAmount = recipe.biggestAmount;
 							animalRecipes[recipe.fillTypeIndex] = aRecipe;
