@@ -91,7 +91,7 @@ function ProductionInfoHud:init()
 	local productionFrame = InGameMenuProductionInfo.new(ProductionInfoHud, ProductionInfoHud.i18n, ProductionInfoHud.messageCenter)
 	g_gui:loadGui(ProductionInfoHud.modDir .. "Gui/InGameMenuProductionInfo.xml", "InGameMenuProductionInfo", productionFrame, true)
 	
-	ProductionInfoHud.fixInGameMenu(productionFrame,"InGameMenuProductionInfo", {0,0,1024,1024}, 13, ProductionInfoHud:makeIsProductionInfoEnabledPredicate())
+	ProductionInfoHud.fixInGameMenu(productionFrame,"InGameMenuProductionInfo", {0,0,1024,1024}, ProductionInfoHud:makeIsProductionInfoEnabledPredicate())
 	productionFrame:initialize()
 end
 
@@ -100,7 +100,7 @@ function ProductionInfoHud:makeIsProductionInfoEnabledPredicate()
 end
 
 -- from Courseplay
-function ProductionInfoHud.fixInGameMenu(frame,pageName,uvs,position,predicateFunc)
+function ProductionInfoHud.fixInGameMenu(frame, pageName, uvs, predicateFunc)
 	local inGameMenu = g_gui.screenControllers[InGameMenu]
 
 	-- remove all to avoid warnings
@@ -115,7 +115,20 @@ function ProductionInfoHud.fixInGameMenu(frame,pageName,uvs,position,predicateFu
 	inGameMenu.pagingElement:addElement(inGameMenu[pageName])
 
 	inGameMenu:exposeControlsAsFields(pageName)
+	
+	-- position bestimmen anhand des produktions menues, den da soll es drüber stehen
+	local position = 13;
+	-- find original production page
+	for i = 1, #inGameMenu.pagingElement.elements do
+		local child = inGameMenu.pagingElement.elements[i];
 
+		if child == inGameMenu.pageProduction then
+			position = i;
+			break
+		end
+	end	
+
+	-- alles was 
 	for i = 1, #inGameMenu.pagingElement.elements do
 		local child = inGameMenu.pagingElement.elements[i]
 		if child == inGameMenu[pageName] then
@@ -356,9 +369,10 @@ function ProductionInfoHud:createProductionNeedingTable(mode)
 	if g_currentMission.productionChainManager.farmIds[farmId] ~= nil and g_currentMission.productionChainManager.farmIds[farmId].productionPoints ~= nil then
 		for _, productionPoint in pairs(g_currentMission.productionChainManager.farmIds[farmId].productionPoints) do
 		
+			-- hidden stuff from GTX production script
 			if productionPoint.hiddenOnUI ~= nil and productionPoint.hiddenOnUI == true then
 				goto ignoreProduction
-			end
+			end			
 				
 			local numActiveProductions = #productionPoint.activeProductions
 			local animalRecipes = {};
@@ -416,9 +430,15 @@ function ProductionInfoHud:createProductionNeedingTable(mode)
 				local fillTypeItem = myFillTypes[fillTypeId];
 				
 					for _, production in pairs(productionPoint.activeProductions) do
+					
+					-- skip productions of the production point when needed
+					if production.hideFromMenu ~= nil and production.hideFromMenu == true then
+						goto skipProductionInputInCreateProductionNeedingTable
+					end
+						
 					-- berechnen des yearFactor wenn notwendig
 					local yearFactor = 1
-						if mode == InGameMenuProductionInfo.MODE_YEAR then
+					if mode == InGameMenuProductionInfo.MODE_YEAR then
 						if production.months ~= nil then
 							local months = string.split(production.months, " ");
 							yearFactor = yearFactor * (#months/12)
@@ -442,6 +462,36 @@ function ProductionInfoHud:createProductionNeedingTable(mode)
 							else
 								fillTypeItem.usagePerMonth = fillTypeItem.usagePerMonth + (production.cyclesPerMonth * input.amount) * factor / (productionPoint.sharedThroughputCapacity and numActiveProductions or 1) * yearFactor;
 							end 
+						
+						-- outputConditional von Revamp könnte im Input stehen
+						if input.outputConditional ~= nil and not input.outputConditional == false then
+												
+							local outputMode = productionPoint:getOutputDistributionMode(fillTypeId)
+						
+							-- wenn es dieser filltype ist der gerade durchläuft und wenn wenn davo auch was drin ist, wird berechnet
+							if input.outputConditional == fillTypeId and productionPoint:getFillLevel(fillTypeId) > 1 then
+								local producedPerMonth = production.cyclesPerMonth * input.outputAmount * factor / (productionPoint.sharedThroughputCapacity and numActiveProductions or 1) * yearFactor;
+								
+								-- outputConditional hat keine Booster
+								local boostFactor = 1;
+								
+								local producedPerMonthWithBooster = (producedPerMonth*boostFactor);
+								fillTypeItem.producedPerMonth = fillTypeItem.producedPerMonth + producedPerMonth
+								fillTypeItem.producedPerMonthWithBooster = fillTypeItem.producedPerMonthWithBooster + producedPerMonthWithBooster
+								
+								if outputMode == ProductionPoint.OUTPUT_MODE.DIRECT_SELL then
+									fillTypeItem.sellPerMonth = fillTypeItem.sellPerMonth + producedPerMonth;
+									fillTypeItem.sellPerMonthWithBooster = fillTypeItem.sellPerMonthWithBooster + producedPerMonthWithBooster;
+								elseif outputMode == ProductionPoint.OUTPUT_MODE.AUTO_DELIVER then
+									fillTypeItem.distributePerMonth = fillTypeItem.distributePerMonth + producedPerMonth;
+									fillTypeItem.distributePerMonthWithBooster = fillTypeItem.distributePerMonthWithBooster + producedPerMonthWithBooster;
+								else
+									fillTypeItem.keepPerMonth = fillTypeItem.keepPerMonth + producedPerMonth;
+									fillTypeItem.keepPerMonthWithBooster = fillTypeItem.keepPerMonthWithBooster + producedPerMonthWithBooster;
+								end
+							end
+						
+						end
 						end
 					end
 					
@@ -478,6 +528,8 @@ function ProductionInfoHud:createProductionNeedingTable(mode)
 							end
 						end
 					end
+				
+					::skipProductionInputInCreateProductionNeedingTable::
 				end
 			end
 			
@@ -590,6 +642,12 @@ function ProductionInfoHud:refreshProductionsTable()
 					productionItem.fillTypeTitle = fillType.title;
 					
 					for _, production in pairs(productionPoint.activeProductions) do
+					
+						-- skip productions of the production point when needed
+						if production.hideFromMenu ~= nil and production.hideFromMenu == true then
+							goto skipProductionInputInRefreshProductionsTable
+						end
+						
 						for _, input in pairs(production.inputs) do
 							-- status 3 = läuft nicht weil ausgang voll
 							if input.type == fillTypeId then
@@ -607,6 +665,8 @@ function ProductionInfoHud:refreshProductionsTable()
 						if production.activeHours ~= nil then
 							productionItem.timeAdjustment = productionItem.timeAdjustment * (production.activeHours / 24)
 						end
+						
+						::skipProductionInputInRefreshProductionsTable::
 					end
 					
 					
@@ -645,6 +705,12 @@ function ProductionInfoHud:refreshProductionsTable()
 				
 				-- jetzt noch mal alle mix gruppen die restlaufzeit aller berechnen
 				for _, production in pairs(productionPoint.activeProductions) do
+					
+					-- skip productions of the production point when needed
+					if production.hideFromMenu ~= nil and production.hideFromMenu == true then
+						goto skipProductionMixInRefreshProductionsTable
+					end
+						
 					for n = 1, 5 do
 						local productionItem = {}
 						productionItem.name = productionPoint.owningPlaceable:getName();
@@ -730,6 +796,8 @@ function ProductionInfoHud:refreshProductionsTable()
 							end
 						end
 					end
+					
+					::skipProductionMixInRefreshProductionsTable::
 				end
 				
 				::ignoreProduction::
@@ -809,15 +877,21 @@ function ProductionInfoHud:refreshProductionsTable()
 					
 					-- Wenn alle gleich sind nur ein eintrag machen
 					local allSame = nil;
+					local fillLevelTotal = 0;
+					local capacityTotal = 0;
 					local compareValue = nil;
 					for _, item in pairs(groupItems) do
 						if compareValue == nil then
 							compareValue = item.timeInMinutes
 							allSame = true;
+							fillLevelTotal = item.fillLevel;
+							capacityTotal = item.capacity;
 						else
 							if compareValue ~= item.timeInMinutes then
 								allSame = false;
 							end
+							fillLevelTotal = fillLevelTotal + item.fillLevel;
+							capacityTotal = capacityTotal + item.capacity;
 						end
 					end
 					
@@ -825,6 +899,8 @@ function ProductionInfoHud:refreshProductionsTable()
 						if  allSame then
 							local productionItem = groupItems[1]
 							productionItem.fillTypeTitle = placeable.spec_husbandryFood.info.title;
+							productionItem.capacity = capacityTotal;
+							productionItem.fillLevel = fillLevelTotal;
 							table.insert(myProductions, productionItem)
 						else
 							for _, item in pairs(groupItems) do
@@ -851,7 +927,8 @@ function ProductionInfoHud:refreshProductionsTable()
 						end
 						
 						local producableWithThisIngredient = fillLevel / ingredient.ratio;
-						local hoursLeft = producableWithThisIngredient / placeable.spec_husbandryFood.litersPerHour
+						local hoursLeft = producableWithThisIngredient / placeable.spec_husbandryFood.litersPerHour * g_currentMission.environment.daysPerPeriod;
+						
 						local spot = feedingRobot.fillTypeToUnloadingSpot[ingredient.fillTypes[1]]
 
 						local productionItem = {}
@@ -1036,26 +1113,112 @@ function ProductionInfoHud:refreshProductionsTable()
 				end
 				
 				-- Tiere voll, also muss was verkauft werden
-				if ProductionInfoHud.settings["display"]["showFullAnimals"] and placeable:getNumOfFreeAnimalSlots() == 0 then
-					local productionItem = {}
-					productionItem.name = placeable:getName();
-					-- productionItem.fillTypeId = fillTypeId
-					productionItem.needPerHour = 0;
-					productionItem.hoursLeft = 0
-					productionItem.fillLevel = 0;
-					productionItem.capacity = 0;
-					productionItem.isInput = false;
-					if (placeable.spec_husbandryPallets ~= nil) then
-						productionItem.fillTypeTitle =  placeable.spec_husbandryPallets.animalTypeName
-					else
-						productionItem.fillTypeTitle = g_i18n:getText("helpLine_Animals") 
+				if ProductionInfoHud.settings["display"]["showFullAnimals"] then
+					-- true, wenn überbelegung zugelassen ist und somit zeigen wir voll nicht mehr an
+					local added = false;
+					
+					-- mit eas überbelegung anders auslesen und das gleiche anzeigen
+					local husbandrySpec = placeable.spec_husbandryAnimals
+					if husbandrySpec ~= nil and husbandrySpec.allowOvercrowding == true then
+						added = true
+						local totalNumAnimals = husbandrySpec:getNumOfAnimals()
+						if husbandrySpec.maxNumAnimals < totalNumAnimals then
+							local productionItem = {}
+							productionItem.name = placeable:getName();
+							-- productionItem.fillTypeId = fillTypeId
+							productionItem.needPerHour = 0;
+							productionItem.hoursLeft = 0
+							productionItem.fillLevel = 0;
+							productionItem.capacity = 0;
+							productionItem.isInput = false;
+							if (placeable.spec_husbandryPallets ~= nil) then
+								productionItem.fillTypeTitle =  placeable.spec_husbandryPallets.animalTypeName
+							else
+								productionItem.fillTypeTitle = g_i18n:getText("helpLine_Animals") 
+							end
+
+							if placeable.eas_numOvercrowdingHours ~= nil and FS22_EnhancedAnimalSystem ~= nil and FS22_EnhancedAnimalSystem.EnhancedAnimalSystem ~= nil and FS22_EnhancedAnimalSystem.EnhancedAnimalSystem.Settings ~= nil and FS22_EnhancedAnimalSystem.EnhancedAnimalSystem.Settings.NumHoursOfOvercrowdingBeforReduceHealth ~= nil then
+								productionItem.hoursLeft = FS22_EnhancedAnimalSystem.EnhancedAnimalSystem.Settings.NumHoursOfOvercrowdingBeforReduceHealth - placeable.eas_numOvercrowdingHours;
+								if productionItem.hoursLeft < 1 then
+									productionItem.hoursLeft = -3
+								else
+									productionItem.fillTypeTitle = productionItem.fillTypeTitle .. "(" .. g_i18n:getText("Overcrowded") .. ")"
+								end
+							else
+								productionItem.hoursLeft = -3;
+							end
+							productionItem.capacityLevel = 0;
+							table.insert(myProductions, productionItem)
+							added = true
+						end
 					end
-					productionItem.capacityLevel = 0;
-					productionItem.hoursLeft = -2;
-					table.insert(myProductions, productionItem)
+					
+					-- hier das normale einfach nur voll sein
+					if placeable:getNumOfFreeAnimalSlots() == 0 and added == false then
+						local productionItem = {}
+						productionItem.name = placeable:getName();
+						productionItem.needPerHour = 0;
+						productionItem.hoursLeft = 0
+						productionItem.fillLevel = 0;
+						productionItem.capacity = 0;
+						productionItem.isInput = false;
+						if (placeable.spec_husbandryPallets ~= nil) then
+							productionItem.fillTypeTitle =  placeable.spec_husbandryPallets.animalTypeName
+						else
+							productionItem.fillTypeTitle = g_i18n:getText("helpLine_Animals") 
+						end
+						productionItem.capacityLevel = 0;
+						productionItem.hoursLeft = -2;
+						table.insert(myProductions, productionItem)
+					end
 				end
 			end
 		end
+
+		-- opentime script erweiterung hier, damit das nicht pro frame ausgewertet wird
+		for _, productionData in pairs(myProductions) do
+			if productionData.productionPoint ~= nil and productionData.productionPoint.votOpeningTime ~= nil then
+				if productionData.productionPoint.votIsOpening then
+					-- is open, but when close?
+					for a = 1, #productionData.productionPoint.votOpeningTime do
+						local openingTime = productionData.productionPoint.votOpeningTime[a];
+						if g_currentMission.environment.currentHour >= openingTime.startTime and g_currentMission.environment.currentHour < openingTime.endTime then
+							
+							productionData.name = productionData.name .. " (~" .. openingTime.endTime .. ")";
+						end
+					end
+				else
+					-- is closed, but when open?
+					local nextOpening = nil;
+					local firstOpening = nil;
+					for a = 1, #productionData.productionPoint.votOpeningTime do
+						local openingTime = productionData.productionPoint.votOpeningTime[a];
+						if openingTime.startTime > g_currentMission.environment.currentHour then
+							if nextOpening == nil then
+								nextOpening = openingTime;
+							else
+								if openingTime.startTime < nextOpening.startTime then
+									nextOpening = openingTime;
+								end
+							end
+						end
+						if firstOpening == nil then
+							firstOpening = openingTime;
+						else
+							if openingTime.startTime < firstOpening.startTime then
+								firstOpening = openingTime;
+							end
+						end
+					end
+					if nextOpening ~= nil then
+						productionData.name = productionData.name .. " (" .. nextOpening.startTime .. "~)";
+					elseif firstOpening ~= nil then
+						productionData.name = productionData.name .. " (" .. firstOpening.startTime .. "~)";
+					end
+				end
+			end
+		end
+				
 
 		table.sort(myProductions, compPrductionTable)
 		
@@ -1286,11 +1449,14 @@ function ProductionInfoHud:draw()
 				lineCount = lineCount + 1;
 			
 				local productionOutputItem = {}
-				productionOutputItem.productionPointName = productionData.name
+				productionOutputItem.productionPointName = productionData.name;
 				productionOutputItem.fillTypeTitle = productionData.fillTypeTitle
 				productionOutputItem.TextColor = ProductionInfoHud.colors.WHITE;
 				
-				if productionData.hoursLeft == -2 then
+				if productionData.hoursLeft == -3 then
+					productionOutputItem.TimeLeftString = g_i18n:getText("Overcrowded");
+					productionOutputItem.TextColor = ProductionInfoHud.colors.RED;
+				elseif productionData.hoursLeft == -2 then
 					productionOutputItem.TimeLeftString = g_i18n:getText("Full");
 					productionOutputItem.TextColor = ProductionInfoHud.colors.RED;
 				elseif productionData.hoursLeft == -1 then
@@ -1711,5 +1877,5 @@ addModEventListener(ProductionInfoHud);
 -- local rX, rY, rZ = getRotation(place.node);
 -- print("place.node rX:"..rX.." rY:"..rY.." rZ:"..rZ);
 
--- print("loadingPattern")
--- DebugUtil.printTableRecursively(loadingPattern,"_",0,2)
+-- print("FS22_EnhancedAnimalSystem")
+-- DebugUtil.printTableRecursively(FS22_EnhancedAnimalSystem,"_",0,2)
