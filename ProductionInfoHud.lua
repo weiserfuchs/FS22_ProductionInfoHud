@@ -27,6 +27,10 @@ ProductionInfoHud.PossibleMaxLines = {"2", "3", "4", "5", "6", "7", "8", "9", "1
 ProductionInfoHud.PossibleAmounts = {"5000", "10000", "50000", "100000", "200000", "250000"}
 ProductionInfoHud.PossibleTextSizes = {"8", "9", "10", "11", "12", "13", "14", "15"}
 
+function ProductionInfoHud.print(text, ...)
+	print("ProductionInfoHud Debug: " .. string.format(text, ...));
+end
+
 local function isDedi()
   local result = g_currentMission:getIsServer() and g_currentMission.connectedToDedicatedServer == true;
   -- print("isDedi: " .. tostring(result));
@@ -661,22 +665,47 @@ function ProductionInfoHud:refreshProductionsTable()
 									-- mix type hier ignorieren. müssen separat gerechnet werden
 								end
 							end
+							
+							-- wenn booster könnte ein conditional outputConditional dran hängen und den dann wieder abziehen von den needPerHour
+							if input.mix == 6 then 
+								if input.outputConditional ~= nil and not input.outputConditional == false then
+									if input.outputConditional == fillTypeId and productionPoint:getFillLevel(fillTypeId) > 1 then
+										productionItem.isOutput = true;
+										if production.status ~= 3 then
+											productionItem.needPerHour = productionItem.needPerHour - (production.cyclesPerHour * input.outputAmount)
+										end
+									end
+								end
+							end
 						end
 						if production.activeHours ~= nil then
 							productionItem.timeAdjustment = productionItem.timeAdjustment * (production.activeHours / 24)
 						end
 						
+						-- hier die outputs vom gleichen type wieder abziehen, damit sollten dann auch input/output nutzbar werden
+						for _, output in pairs(production.outputs) do
+							-- status 3 = läuft nicht weil ausgang voll
+							if output.type == fillTypeId then
+								productionItem.isOutput = true;
+								if production.status ~= 3 then
+									productionItem.needPerHour = productionItem.needPerHour - (production.cyclesPerHour * output.amount)
+								end
+							end
+						end
+						
 						::skipProductionInputInRefreshProductionsTable::
 					end
-					
-					
 
 					if (productionItem.fillLevel ~= 0) and (productionItem.needPerHour ~= 0) then
 						-- hier die anzahl der Tage pro Monat berücksichtigen
 						productionItem.hoursLeft = productionItem.fillLevel / productionItem.needPerHour * g_currentMission.environment.daysPerPeriod;
 					end
 					
-					if (not ignoreInput and productionItem.needPerHour > 0 and not productionItem.isOutput) then 
+		
+-- print("productionItem")
+-- DebugUtil.printTableRecursively(productionItem,"_",0,2)
+
+					if (not ignoreInput and productionItem.needPerHour > 0 and productionItem.isInput) then 
 						table.insert(myProductions, productionItem)
 					end
 					
@@ -693,6 +722,11 @@ function ProductionInfoHud:refreshProductionsTable()
 									end
 								end
 							end
+						end
+					
+						-- always on stuff from GTX production script do not show when full.
+						if productionPoint.extendedFeaturesAlwaysActive ~= nil and productionPoint.extendedFeaturesAlwaysActive == true then
+							oneProductionWithOutputActive = false;
 						end
 						
 						if oneProductionWithOutputActive then
@@ -820,6 +854,7 @@ function ProductionInfoHud:refreshProductionsTable()
 					productionItem.fillLevel = placeable:getTotalFood();
 					productionItem.capacity = placeable:getFoodCapacity();
 					productionItem.isInput = true;
+					productionItem.isOutput = false;
 					
 					if productionItem.capacity == 0 then 
 						productionItem.capacityLevel = 0
@@ -855,6 +890,7 @@ function ProductionInfoHud:refreshProductionsTable()
 						productionItem.hoursLeft = 0
 						productionItem.capacity = capacityTotal * foodGroup.eatWeight
 						productionItem.isInput = true;
+						productionItem.isOutput = false;
 					
 						if productionItem.capacity == 0 then 
 							productionItem.capacityLevel = 0
@@ -941,6 +977,7 @@ function ProductionInfoHud:refreshProductionsTable()
 						productionItem.fillLevel = fillLevel;
 						productionItem.capacity = spot.capacity;
 						productionItem.isInput = true;
+						productionItem.isOutput = false;
 						
 						if productionItem.capacity == 0 then 
 							productionItem.capacityLevel = 0
@@ -972,6 +1009,7 @@ function ProductionInfoHud:refreshProductionsTable()
 						productionItem.fillLevel = placeable.spec_husbandryWater:getHusbandryFillLevel(FillType.WATER)
 						productionItem.capacity = placeable.spec_husbandryWater:getHusbandryCapacity(FillType.WATER)
 						productionItem.isInput = true;
+						productionItem.isOutput = false;
 
 						if productionItem.capacity == 0 then 
 							productionItem.capacityLevel = 0
@@ -1004,6 +1042,7 @@ function ProductionInfoHud:refreshProductionsTable()
 					productionItem.fillLevel = placeable.spec_husbandryStraw:getHusbandryFillLevel(FillType.STRAW)
 					productionItem.capacity = placeable.spec_husbandryStraw:getHusbandryCapacity(FillType.STRAW)
 					productionItem.isInput = true;
+					productionItem.isOutput = false;
 					
 					if productionItem.capacity == 0 then 
 						productionItem.capacityLevel = 0
@@ -1035,6 +1074,7 @@ function ProductionInfoHud:refreshProductionsTable()
 					productionItem.fillLevel = placeable.spec_husbandryStraw:getHusbandryFillLevel(FillType.MANURE)
 					productionItem.capacity = placeable.spec_husbandryStraw:getHusbandryCapacity(FillType.MANURE)
 					productionItem.isInput = false;
+					productionItem.isOutput = false;
 					
 					if productionItem.capacity == 0 then 
 						productionItem.capacityLevel = 0
@@ -1069,6 +1109,7 @@ function ProductionInfoHud:refreshProductionsTable()
 					productionItem.fillLevel = placeable.spec_husbandryMilk:getHusbandryFillLevel(FillType.MILK)
 					productionItem.capacity = placeable.spec_husbandryMilk:getHusbandryCapacity(FillType.MILK)
 					productionItem.isInput = false;
+					productionItem.isOutput = true;
 					
 					if productionItem.capacity == 0 then 
 						productionItem.capacityLevel = 0
@@ -1097,6 +1138,7 @@ function ProductionInfoHud:refreshProductionsTable()
 					productionItem.fillLevel = placeable.spec_husbandryLiquidManure:getHusbandryFillLevel(FillType.LIQUIDMANURE)
 					productionItem.capacity = placeable.spec_husbandryLiquidManure:getHusbandryCapacity(FillType.LIQUIDMANURE)
 					productionItem.isInput = false;
+					productionItem.isOutput = true;
 					
 					if productionItem.capacity == 0 then 
 						productionItem.capacityLevel = 0
@@ -1131,8 +1173,8 @@ function ProductionInfoHud:refreshProductionsTable()
 							-- productionItem.fillTypeId = fillTypeId
 							productionItem.needPerHour = 0;
 							productionItem.hoursLeft = 0
-							productionItem.fillLevel = 0;
-							productionItem.capacity = 0;
+							productionItem.fillLevel = totalNumAnimals;
+							productionItem.capacity = husbandrySpec.maxNumAnimals;
 							productionItem.isInput = false;
 							if (placeable.spec_husbandryPallets ~= nil) then
 								productionItem.fillTypeTitle =  placeable.spec_husbandryPallets.animalTypeName
@@ -1370,8 +1412,12 @@ end
 
 function ProductionInfoHud:draw()
 		
-	if not ProductionInfoHud.isClient then return end	
+	if not ProductionInfoHud.isClient then return end
 	
+	-- ProductionInfoHud.print("g_noHudModeEnabled: %s", g_noHudModeEnabled)
+	if g_noHudModeEnabled then return end
+	if not g_currentMission.hud.isVisible then return end
+		
 	if ProductionInfoHud.productionDataSorted == nil then return end
 	
 	if ProductionInfoHud.settings["display"]["showType"] == "NONE" then 
