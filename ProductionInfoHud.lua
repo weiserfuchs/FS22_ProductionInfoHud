@@ -843,7 +843,7 @@ function ProductionInfoHud:refreshProductionsTable()
 		
 		-- Tiere
 		for _, placeable in pairs(g_currentMission.husbandrySystem.placeables) do
-			if placeable.ownerFarmId == farmId and placeable.spec_husbandryFood.litersPerHour ~= 0 then
+			if placeable.ownerFarmId == farmId and placeable.spec_husbandryFood ~= nil and placeable.spec_husbandryFood.litersPerHour ~= 0 then
 				-- Futter der Tiere als gesamtes pro Stall
 				local animalFood = g_currentMission.animalFoodSystem:getAnimalFood(placeable.spec_husbandryFood.animalTypeIndex)
 				if animalFood.consumptionType == AnimalFoodSystem.FOOD_CONSUME_TYPE_SERIAL then
@@ -1264,6 +1264,12 @@ function ProductionInfoHud:refreshProductionsTable()
 			end
 		end
 				
+		-- zu kleine Zeiten mal auf 0 setzen
+		for _, productionData in pairs(myProductions) do
+			if productionData.hoursLeft > 0 and productionData.hoursLeft < 0.02 then
+				productionData.hoursLeft = 0;
+			end
+		end
 
 		table.sort(myProductions, compPrductionTable)
 		
