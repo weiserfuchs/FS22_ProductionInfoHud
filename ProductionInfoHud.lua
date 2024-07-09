@@ -18,10 +18,10 @@ ProductionInfoHud.isClient = false;
 ProductionInfoHud.timePast = 0;
 ProductionInfoHud.overlay = Overlay.new(HUD.MENU_BACKGROUND_PATH, 0, 0, 0, 0);
 ProductionInfoHud.colors = {};
-ProductionInfoHud.colors.WHITE =	{1.000, 1.000, 1.000, 1}
-ProductionInfoHud.colors.ORANGE =   {0.840, 0.270, 0.020, 1}
-ProductionInfoHud.colors.RED =	  {0.580, 0.040, 0.020, 1}
-ProductionInfoHud.colors.YELLOW =   {0.980, 0.420, 0.000, 1}
+ProductionInfoHud.colors.WHITE =	{1.0000, 1.0000, 1.0000, 1}
+ProductionInfoHud.colors.ORANGE =   {0.9157, 0.1420, 0.0002, 1} -- AMAZONE_ORANGE1
+ProductionInfoHud.colors.RED =		{1.0000, 0.0220, 0.0037, 1} -- AMAZONE_RED1
+ProductionInfoHud.colors.YELLOW =	{0.9240, 0.7155, 0.0600, 1} -- AMAZONE_YELLOW2
 ProductionInfoHud.PossiblePositions = {"TopCenter", "BelowHelp", "BelowVehicleInspector"}
 ProductionInfoHud.PossibleMaxLines = {"2", "3", "4", "5", "6", "7", "8", "9", "10", "12", "15", "20", "25"}
 ProductionInfoHud.PossibleAmounts = {"5000", "10000", "50000", "100000", "200000", "250000"}
@@ -29,6 +29,15 @@ ProductionInfoHud.PossibleTextSizes = {"8", "9", "10", "11", "12", "13", "14", "
 
 function ProductionInfoHud.print(text, ...)
 	print("ProductionInfoHud Debug: " .. string.format(text, ...));
+end
+
+function ProductionInfoHud.printTable(text, myTable)
+	print("ProductionInfoHud Debug: " .. text);
+	if myTable == nil then 
+		print("is nil")
+	else
+		DebugUtil.printTableRecursively(myTable,"_",0,2)
+	end
 end
 
 local function isDedi()
@@ -51,6 +60,7 @@ function ProductionInfoHud:init()
 	ProductionInfoHud.inputManager = g_gui.inputManager;
 	ProductionInfoHud.sellPriceDataSorted = {};
 	ProductionInfoHud.productionDataSorted = {};
+	ProductionInfoHud.IsTerraLifePlus = false;
 	
 	-- default settings einstellen
 	ProductionInfoHud.settings = {};
@@ -87,6 +97,13 @@ function ProductionInfoHud:init()
 			setTextBold(false)
 			setTextColor(unpack(ProductionInfoHud.InfoMessageHUD.Colors[1][2])) --Back to default color which is white
 			setTextAlignment(RenderText.ALIGN_LEFT)
+		end
+	end
+	
+	local TLP = g_modManager:getModByName("FS22_TerraLifePlus")
+	if TLP ~= nil then
+		if g_modIsLoaded[TLP.modName] then
+			ProductionInfoHud.IsTerraLifePlus = true
 		end
 	end
 	   
@@ -593,6 +610,227 @@ function compFillTypeResultTable(w1,w2)
 		return true
 	end
 end
+
+function ProductionInfoHud:AddVanillaHusbandryFood(myProductions, placeable)
+	-- Futter der Tiere als gesamtes pro Stall
+	local animalFood = g_currentMission.animalFoodSystem:getAnimalFood(placeable.spec_husbandryFood.animalTypeIndex)
+	if animalFood.consumptionType == AnimalFoodSystem.FOOD_CONSUME_TYPE_SERIAL then
+		local productionItem = {}
+		productionItem.name = placeable:getName();
+		productionItem.needPerHour = placeable.spec_husbandryFood.litersPerHour;
+		productionItem.hoursLeft = 0
+		productionItem.fillLevel = placeable:getTotalFood();
+		productionItem.capacity = placeable:getFoodCapacity();
+		productionItem.isInput = true;
+		productionItem.isOutput = false;
+		
+		if productionItem.capacity == 0 then 
+			productionItem.capacityLevel = 0
+		elseif productionItem.capacity == nil then
+			productionItem.capacityLevel = 0
+			print("Error: No storage for '" .. g_currentMission.fillTypeManager.fillTypes[fillTypeId].name .. "' in productionPoint but defined to used. Has to be fixed in '" .. productionPoint.owningPlaceable.customEnvironment .."'.")
+		else
+			productionItem.capacityLevel = productionItem.fillLevel / productionItem.capacity;
+		end
+		productionItem.fillTypeTitle = placeable.spec_husbandryFood.info.title;
+
+		if (productionItem.fillLevel ~= 0) and (productionItem.needPerHour ~= 0) then
+			-- hier die anzahl der Tage pro Monat berücksichtigen
+			productionItem.hoursLeft = productionItem.fillLevel / productionItem.needPerHour * g_currentMission.environment.daysPerPeriod;
+		end
+			
+		if (productionItem.needPerHour > 0) then 
+			table.insert(myProductions, productionItem)
+		end
+	elseif animalFood.consumptionType == AnimalFoodSystem.FOOD_CONSUME_TYPE_PARALLEL then
+		-- parallele Fütterung pro item berechnen
+		local needPerHourTotal = placeable.spec_husbandryFood.litersPerHour;
+		local capacityTotal = placeable:getFoodCapacity();
+		
+		-- wie lange hält jede FoodGroup?
+		local groupItems = {}
+		for _, foodGroup in pairs(animalFood.groups) do
+		
+			local productionItem = {}
+			productionItem.name = placeable:getName();
+			productionItem.fillLevel = g_currentMission.animalFoodSystem:getTotalFillLevelInGroup(foodGroup, placeable.spec_husbandryFood.fillLevels)
+			productionItem.needPerHour = needPerHourTotal * foodGroup.eatWeight
+			productionItem.hoursLeft = 0
+			productionItem.capacity = capacityTotal * foodGroup.eatWeight
+			productionItem.isInput = true;
+			productionItem.isOutput = false;
+		
+			if productionItem.capacity == 0 then 
+				productionItem.capacityLevel = 0
+			elseif productionItem.capacity == nil then
+				productionItem.capacityLevel = 0
+				print("Error: No storage for '" .. g_currentMission.fillTypeManager.fillTypes[fillTypeId].name .. "' in productionPoint but defined to used. Has to be fixed in '" .. productionPoint.owningPlaceable.customEnvironment .."'.")
+			else
+				productionItem.capacityLevel = productionItem.fillLevel / productionItem.capacity;
+			end
+			productionItem.fillTypeTitle = foodGroup.title;
+
+			if (productionItem.fillLevel ~= 0) and (productionItem.needPerHour ~= 0) then
+				-- hier die anzahl der Tage pro Monat berücksichtigen
+				productionItem.hoursLeft = productionItem.fillLevel / productionItem.needPerHour * g_currentMission.environment.daysPerPeriod;
+			end
+			
+				
+			if (productionItem.needPerHour > 0) then 
+				productionItem.timeInMinutes = Utils.formatTime(productionItem.hoursLeft * 60)
+				table.insert(groupItems, productionItem)
+			end
+		end
+		
+		-- Wenn alle gleich sind nur ein eintrag machen
+		local allSame = nil;
+		local fillLevelTotal = 0;
+		local capacityTotal = 0;
+		local compareValue = nil;
+		for _, item in pairs(groupItems) do
+			if compareValue == nil then
+				compareValue = item.timeInMinutes
+				allSame = true;
+				fillLevelTotal = item.fillLevel;
+				capacityTotal = item.capacity;
+			else
+				if compareValue ~= item.timeInMinutes then
+					allSame = false;
+				end
+				fillLevelTotal = fillLevelTotal + item.fillLevel;
+				capacityTotal = capacityTotal + item.capacity;
+			end
+		end
+		
+		if allSame ~= nil then
+			if  allSame then
+				local productionItem = groupItems[1]
+				productionItem.fillTypeTitle = placeable.spec_husbandryFood.info.title;
+				productionItem.capacity = capacityTotal;
+				productionItem.fillLevel = fillLevelTotal;
+				table.insert(myProductions, productionItem)
+			else
+				for _, item in pairs(groupItems) do
+					table.insert(myProductions, item)
+				end
+			end
+		end
+	end
+end
+
+function ProductionInfoHud:AddTerraLifeHusbandryFood(myProductions, placeable)
+
+	-- ProductionInfoHud.print("timeAdjustment: %s daysPerPeriod: %s", g_currentMission.environment.timeAdjustment, g_currentMission.environment.daysPerPeriod);
+			
+	-- futter mit TLP ist pro Cluster unterschiedlich, also müssen wir erst mal alles sammeln in productionItems
+	-- liste mit den title als key und den productionItem als daten so dass es direkt eingetragen werden könnte
+	local productionItems = {};
+	
+	local clusters = placeable.spec_husbandryAnimals.clusterSystem:getClusters();
+	for _, cluster in ipairs(clusters) do
+		local animalFood = g_currentMission.animalFoodSystem:getAnimalFood(placeable.spec_husbandryFood.animalTypeIndex, cluster);
+				
+		-- berechnen wie viel dieser cluster pro stunde braucht nur ein mal pro cluster für spätere verwendung
+		local litersPerHour = 0;
+		local subType = g_currentMission.animalSystem:getSubTypeByIndex(cluster.subTypeIndex);
+		if subType ~= nil then
+			local food = subType.input.food;
+
+			if food ~= nil then
+				local age = cluster:getAge();
+				local litersPerAnimal = food:get(age);
+				local litersPerDay = litersPerAnimal * cluster:getNumAnimals();
+				local lactationFactor = cluster:getLactationFoodFactor();
+				litersPerHour = litersPerHour + litersPerDay / 24;
+				litersPerHour = litersPerHour * lactationFactor;
+			end
+		end
+		
+		if animalFood.consumptionType == AnimalFoodSystem.FOOD_CONSUME_TYPE_SERIAL then
+			-- later 
+		elseif animalFood.consumptionType == AnimalFoodSystem.FOOD_CONSUME_TYPE_PARALLEL then
+			for _, foodGroup in pairs(animalFood.groups) do
+			
+				local productionItem = productionItems[foodGroup.title];
+				if productionItem == nil then
+					productionItem = {}
+					productionItem.name = placeable:getName();
+					productionItem.fillLevel = g_currentMission.animalFoodSystem:getTotalFillLevelInGroup(foodGroup, placeable.spec_husbandryFood.fillLevels);
+					productionItem.isInput = true;
+					productionItem.isOutput = false;
+					productionItem.fillTypeTitle = foodGroup.title;
+					
+					-- Diese hier müssen am ende berechnet werden aus summenwerten
+					productionItem.needPerHour = 0;
+					productionItem.hoursLeft = 0;
+					productionItem.capacity = 0;
+					productionItem.timeInMinutes = 0;
+					
+					productionItems[foodGroup.title] = productionItem;
+				end
+				
+				-- verbrauch abhängig von cluster litersPerHour und der foodGroup eatweight aufsummieren
+				productionItem.needPerHour = productionItem.needPerHour + litersPerHour * foodGroup.eatWeight;
+			end
+		end
+	end
+	
+	-- jetzt die restzeiten berechnen
+	for _, productionItem in pairs(productionItems) do
+		if (productionItem.fillLevel ~= 0) and (productionItem.needPerHour ~= 0) then
+			-- hier die anzahl der Tage pro Monat berücksichtigen, ist das den korrekt so in TLP?
+			productionItem.hoursLeft = productionItem.fillLevel / (productionItem.needPerHour * g_currentMission.environment.timeAdjustment);
+		end
+		
+		if (productionItem.needPerHour > 0) then 
+			productionItem.timeInMinutes = Utils.formatTime(productionItem.hoursLeft * 60)
+		end
+	end
+	
+	-- ProductionInfoHud.printTable("productionItems", productionItems)
+	
+	-- Wenn alle gleich sind nur ein eintrag machen aber nur bei denen die auch einen verbrauch haben, der rest interessiert nicht
+	local allSame = nil;
+	local fillLevelTotal = 0;
+	local capacityTotal = 0;
+	local compareValue = nil;
+	local firstItem = nil;
+	for _, productionItem in pairs(productionItems) do
+		if (productionItem.needPerHour > 0) then 
+			if compareValue == nil then
+				compareValue = productionItem.timeInMinutes
+				allSame = true;
+				fillLevelTotal = productionItem.fillLevel;
+				capacityTotal = productionItem.capacity;
+				firstItem = productionItem;
+			else
+				if compareValue ~= productionItem.timeInMinutes then
+					allSame = false;
+				end
+				fillLevelTotal = fillLevelTotal + productionItem.fillLevel;
+				capacityTotal = capacityTotal + productionItem.capacity;
+			end
+		end
+	end
+	
+	if allSame ~= nil then
+		if allSame then
+			local productionItem = firstItem;
+			productionItem.fillTypeTitle = placeable.spec_husbandryFood.info.title;
+			productionItem.capacity = capacityTotal;
+			productionItem.fillLevel = fillLevelTotal;
+			table.insert(myProductions, productionItem)
+		else
+			for _, productionItem in pairs(productionItems) do
+				if (productionItem.needPerHour > 0) then 
+					table.insert(myProductions, productionItem)
+				end
+			end
+		end
+	end
+	
+	-- ProductionInfoHud.printTable("myProductions", myProductions)
+end
 		
 function ProductionInfoHud:refreshProductionsTable()
 		
@@ -601,6 +839,8 @@ function ProductionInfoHud:refreshProductionsTable()
 		
 		if g_currentMission.productionChainManager.farmIds[farmId] ~= nil and g_currentMission.productionChainManager.farmIds[farmId].productionPoints ~= nil then
 			for _, productionPoint in pairs(g_currentMission.productionChainManager.farmIds[farmId].productionPoints) do
+			
+				-- ProductionInfoHud.printTable("productionPoint", productionPoint)
 				
 				if productionPoint.hiddenOnUI ~= nil and productionPoint.hiddenOnUI == true then
 					goto ignoreProduction
@@ -620,8 +860,8 @@ function ProductionInfoHud:refreshProductionsTable()
 					productionItem.fillTypeId = fillTypeId
 					productionItem.needPerHour = 0
 					productionItem.hoursLeft = 0
-					productionItem.fillLevel = fillLevel
-					productionItem.capacity = productionPoint.storage.capacities[fillTypeId]
+					productionItem.fillLevel = productionPoint:getFillLevel(fillTypeId)
+					productionItem.capacity = productionPoint:getCapacity(fillTypeId)
 					productionItem.isInput = false;
 					productionItem.isOutput = false;
 					productionItem.timeAdjustment = 1;
@@ -747,11 +987,13 @@ function ProductionInfoHud:refreshProductionsTable()
 					if production.hideFromMenu ~= nil and production.hideFromMenu == true then
 						goto skipProductionMixInRefreshProductionsTable
 					end
+					
+					--ProductionInfoHud.printTable("productionPoint.owningPlaceable", productionPoint.owningPlaceable)
 						
 					for n = 1, 5 do
 						local productionItem = {}
 						productionItem.name = productionPoint.owningPlaceable:getName();
-						productionItem.fillTypeTitle = production.name .. " (Mix " .. n .. ")";
+						productionItem.fillTypeTitle = (production.name or production.id) .. " (Mix " .. n .. ")";
 						productionItem.hoursLeft = 0
 						productionItem.timeAdjustment = 1;
 						productionItem.productionPoint = productionPoint;
@@ -841,116 +1083,16 @@ function ProductionInfoHud:refreshProductionsTable()
 			end
 		end
 		
-		-- Tiere
+		-- Tiere, normales futter
 		for _, placeable in pairs(g_currentMission.husbandrySystem.placeables) do
 			if placeable.ownerFarmId == farmId and placeable.spec_husbandryFood ~= nil and placeable.spec_husbandryFood.litersPerHour ~= 0 then
-				-- Futter der Tiere als gesamtes pro Stall
-				local animalFood = g_currentMission.animalFoodSystem:getAnimalFood(placeable.spec_husbandryFood.animalTypeIndex)
-				if animalFood.consumptionType == AnimalFoodSystem.FOOD_CONSUME_TYPE_SERIAL then
-					local productionItem = {}
-					productionItem.name = placeable:getName();
-					productionItem.needPerHour = placeable.spec_husbandryFood.litersPerHour;
-					productionItem.hoursLeft = 0
-					productionItem.fillLevel = placeable:getTotalFood();
-					productionItem.capacity = placeable:getFoodCapacity();
-					productionItem.isInput = true;
-					productionItem.isOutput = false;
-					
-					if productionItem.capacity == 0 then 
-						productionItem.capacityLevel = 0
-					elseif productionItem.capacity == nil then
-						productionItem.capacityLevel = 0
-						print("Error: No storage for '" .. g_currentMission.fillTypeManager.fillTypes[fillTypeId].name .. "' in productionPoint but defined to used. Has to be fixed in '" .. productionPoint.owningPlaceable.customEnvironment .."'.")
-					else
-						productionItem.capacityLevel = productionItem.fillLevel / productionItem.capacity;
-					end
-					productionItem.fillTypeTitle = placeable.spec_husbandryFood.info.title;
-
-					if (productionItem.fillLevel ~= 0) and (productionItem.needPerHour ~= 0) then
-						-- hier die anzahl der Tage pro Monat berücksichtigen
-						productionItem.hoursLeft = productionItem.fillLevel / productionItem.needPerHour * g_currentMission.environment.daysPerPeriod;
-					end
-						
-					if (productionItem.needPerHour > 0) then 
-						table.insert(myProductions, productionItem)
-					end
-				elseif animalFood.consumptionType == AnimalFoodSystem.FOOD_CONSUME_TYPE_PARALLEL then
-					-- parallele Fütterung pro item berechnen
-					local needPerHourTotal = placeable.spec_husbandryFood.litersPerHour;
-					local capacityTotal = placeable:getFoodCapacity();
-					
-					-- wie lange hält jede FoodGroup?
-					local groupItems = {}
-					for _, foodGroup in pairs(animalFood.groups) do
-					
-						local productionItem = {}
-						productionItem.name = placeable:getName();
-						productionItem.fillLevel = g_currentMission.animalFoodSystem:getTotalFillLevelInGroup(foodGroup, placeable.spec_husbandryFood.fillLevels)
-						productionItem.needPerHour = needPerHourTotal * foodGroup.eatWeight
-						productionItem.hoursLeft = 0
-						productionItem.capacity = capacityTotal * foodGroup.eatWeight
-						productionItem.isInput = true;
-						productionItem.isOutput = false;
-					
-						if productionItem.capacity == 0 then 
-							productionItem.capacityLevel = 0
-						elseif productionItem.capacity == nil then
-							productionItem.capacityLevel = 0
-							print("Error: No storage for '" .. g_currentMission.fillTypeManager.fillTypes[fillTypeId].name .. "' in productionPoint but defined to used. Has to be fixed in '" .. productionPoint.owningPlaceable.customEnvironment .."'.")
-						else
-							productionItem.capacityLevel = productionItem.fillLevel / productionItem.capacity;
-						end
-						productionItem.fillTypeTitle = foodGroup.title;
-
-						if (productionItem.fillLevel ~= 0) and (productionItem.needPerHour ~= 0) then
-							-- hier die anzahl der Tage pro Monat berücksichtigen
-							productionItem.hoursLeft = productionItem.fillLevel / productionItem.needPerHour * g_currentMission.environment.daysPerPeriod;
-						end
-						
-							
-						if (productionItem.needPerHour > 0) then 
-							productionItem.timeInMinutes = Utils.formatTime(productionItem.hoursLeft * 60)
-							table.insert(groupItems, productionItem)
-						end
-					end
-					
-					-- Wenn alle gleich sind nur ein eintrag machen
-					local allSame = nil;
-					local fillLevelTotal = 0;
-					local capacityTotal = 0;
-					local compareValue = nil;
-					for _, item in pairs(groupItems) do
-						if compareValue == nil then
-							compareValue = item.timeInMinutes
-							allSame = true;
-							fillLevelTotal = item.fillLevel;
-							capacityTotal = item.capacity;
-						else
-							if compareValue ~= item.timeInMinutes then
-								allSame = false;
-							end
-							fillLevelTotal = fillLevelTotal + item.fillLevel;
-							capacityTotal = capacityTotal + item.capacity;
-						end
-					end
-					
-					if allSame ~= nil then
-						if  allSame then
-							local productionItem = groupItems[1]
-							productionItem.fillTypeTitle = placeable.spec_husbandryFood.info.title;
-							productionItem.capacity = capacityTotal;
-							productionItem.fillLevel = fillLevelTotal;
-							table.insert(myProductions, productionItem)
-						else
-							for _, item in pairs(groupItems) do
-								table.insert(myProductions, item)
-							end
-						end
-					end
-
-
+			
+				-- Futter Auswerten und einfügen
+				if ProductionInfoHud.IsTerraLifePlus then
+					self:AddTerraLifeHusbandryFood(myProductions, placeable);
+				else
+					self:AddVanillaHusbandryFood(myProductions, placeable);
 				end
-					
 				
 				-- Fütterungsroboter vorhanden, dann anders die werte berechnen
 				if placeable.spec_husbandryFeedingRobot ~= nil and placeable.spec_husbandryFeedingRobot.feedingRobot ~= nil then
