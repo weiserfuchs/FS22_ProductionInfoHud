@@ -73,6 +73,7 @@ function ProductionInfoHud:init()
 	ProductionInfoHud.settings["display"]["minSellAmount"] = 1;
 	ProductionInfoHud.settings["display"]["showBooster"] = true;
 	ProductionInfoHud.settings["display"]["textSize"] = 5;
+	ProductionInfoHud.settings["display"]["maxDays"] = 2 * g_currentMission.environment.daysPerPeriod or 1;
 	
 	ProductionInfoHud:LoadSettings();
 	   
@@ -278,7 +279,7 @@ function ProductionInfoHud:createProductionNeedingTable(mode)
 	if mode == InGameMenuProductionInfo.MODE_MONTH then
 		factor = 1;
 	elseif mode == InGameMenuProductionInfo.MODE_HOUR then
-		factor = 1 / (24 * g_currentMission.environment.daysPerPeriod); -- tage einstellungen auslesen!!!
+		factor = 1 / (24 * (1 / g_currentMission.environment.daysPerPeriod)); -- tage einstellungen auslesen!!!
 	else
 		factor = 12;
 	end
@@ -453,8 +454,14 @@ function ProductionInfoHud:createProductionNeedingTable(mode)
 					for _, production in pairs(productionPoint.activeProductions) do
 					
 					-- skip productions of the production point when needed
-					if production.hideFromMenu ~= nil and production.hideFromMenu == true then
+					if production.hideFromMenu ~= nil and production.hideFromMenu == true or production.feedMixer ~= nil then
 						goto skipProductionInputInCreateProductionNeedingTable
+					end
+					
+					-- im revamp ab 1.5 kann boost auch anders sein als 6, deshalb auslesen mit fallback
+					local boostNumber = 6;
+					if production.boostNumber ~= nil then
+						boostNumber = production.boostNumber;
 					end
 						
 					-- berechnen des yearFactor wenn notwendig
@@ -525,7 +532,7 @@ function ProductionInfoHud:createProductionNeedingTable(mode)
 							-- aktive Booster berechnen
 							local boostFactor = 1;
 							for _, input in pairs(production.inputs) do
-								if input.mix ~= nil and input.mix == 6 then
+								if input.mix ~= nil and input.mix == boostNumber then
 									-- ist ein booster
 									if productionPoint:getFillLevel(fillTypeId) > 1 then
 										boostFactor = boostFactor + Utils.getNoNil(input.boostfactor, input.boostFactor);
@@ -636,7 +643,7 @@ function ProductionInfoHud:AddVanillaHusbandryFood(myProductions, placeable)
 
 		if (productionItem.fillLevel ~= 0) and (productionItem.needPerHour ~= 0) then
 			-- hier die anzahl der Tage pro Monat berücksichtigen
-			productionItem.hoursLeft = productionItem.fillLevel / productionItem.needPerHour * g_currentMission.environment.daysPerPeriod;
+			productionItem.hoursLeft = productionItem.fillLevel / (productionItem.needPerHour * (1 / g_currentMission.environment.daysPerPeriod));
 		end
 			
 		if (productionItem.needPerHour > 0) then 
@@ -672,7 +679,7 @@ function ProductionInfoHud:AddVanillaHusbandryFood(myProductions, placeable)
 
 			if (productionItem.fillLevel ~= 0) and (productionItem.needPerHour ~= 0) then
 				-- hier die anzahl der Tage pro Monat berücksichtigen
-				productionItem.hoursLeft = productionItem.fillLevel / productionItem.needPerHour * g_currentMission.environment.daysPerPeriod;
+				productionItem.hoursLeft = productionItem.fillLevel / (productionItem.needPerHour * (1 / g_currentMission.environment.daysPerPeriod));
 			end
 			
 				
@@ -720,7 +727,7 @@ end
 
 function ProductionInfoHud:AddTerraLifeHusbandryFood(myProductions, placeable)
 
-	-- ProductionInfoHud.print("timeAdjustment: %s daysPerPeriod: %s", g_currentMission.environment.timeAdjustment, g_currentMission.environment.daysPerPeriod);
+	-- ProductionInfoHud.print("timeAdjustment: %s daysPerPeriod: %s", (1 / g_currentMission.environment.daysPerPeriod), g_currentMission.environment.daysPerPeriod);
 			
 	-- futter mit TLP ist pro Cluster unterschiedlich, also müssen wir erst mal alles sammeln in productionItems
 	-- liste mit den title als key und den productionItem als daten so dass es direkt eingetragen werden könnte
@@ -779,7 +786,7 @@ function ProductionInfoHud:AddTerraLifeHusbandryFood(myProductions, placeable)
 	for _, productionItem in pairs(productionItems) do
 		if (productionItem.fillLevel ~= 0) and (productionItem.needPerHour ~= 0) then
 			-- hier die anzahl der Tage pro Monat berücksichtigen, ist das den korrekt so in TLP?
-			productionItem.hoursLeft = productionItem.fillLevel / (productionItem.needPerHour * g_currentMission.environment.timeAdjustment);
+			productionItem.hoursLeft = productionItem.fillLevel / (productionItem.needPerHour * (1 / g_currentMission.environment.daysPerPeriod) * 4);
 		end
 		
 		if (productionItem.needPerHour > 0) then 
@@ -888,8 +895,14 @@ function ProductionInfoHud:refreshProductionsTable()
 					for _, production in pairs(productionPoint.activeProductions) do
 					
 						-- skip productions of the production point when needed
-						if production.hideFromMenu ~= nil and production.hideFromMenu == true then
+						if production.hideFromMenu ~= nil and production.hideFromMenu == true or production.feedMixer ~= nil then
 							goto skipProductionInputInRefreshProductionsTable
+						end
+					
+						-- im revamp ab 1.5 kann boost auch anders sein als 6, deshalb auslesen mit fallback
+						local boostNumber = 6;
+						if production.boostNumber ~= nil then
+							boostNumber = production.boostNumber;
 						end
 						
 						for _, input in pairs(production.inputs) do
@@ -907,7 +920,7 @@ function ProductionInfoHud:refreshProductionsTable()
 							end
 							
 							-- wenn booster könnte ein conditional outputConditional dran hängen und den dann wieder abziehen von den needPerHour
-							if input.mix == 6 then 
+							if input.mix == boostNumber then 
 								if input.outputConditional ~= nil and not input.outputConditional == false then
 									if input.outputConditional == fillTypeId and productionPoint:getFillLevel(fillTypeId) > 1 then
 										productionItem.isOutput = true;
@@ -935,10 +948,15 @@ function ProductionInfoHud:refreshProductionsTable()
 						
 						::skipProductionInputInRefreshProductionsTable::
 					end
+					
 
 					if (productionItem.fillLevel ~= 0) and (productionItem.needPerHour ~= 0) then
+						-- wenn geteilte produktion, bedarf durch die anzahl der laufenden Produktionen Teilen
+						if productionPoint.sharedThroughputCapacity then
+							productionItem.needPerHour = productionItem.needPerHour / #productionPoint.activeProductions;
+						end
 						-- hier die anzahl der Tage pro Monat berücksichtigen
-						productionItem.hoursLeft = productionItem.fillLevel / productionItem.needPerHour * g_currentMission.environment.daysPerPeriod;
+						productionItem.hoursLeft = productionItem.fillLevel / (productionItem.needPerHour * (1 / g_currentMission.environment.daysPerPeriod));
 					end
 					
 		
@@ -984,13 +1002,19 @@ function ProductionInfoHud:refreshProductionsTable()
 				for _, production in pairs(productionPoint.activeProductions) do
 					
 					-- skip productions of the production point when needed
-					if production.hideFromMenu ~= nil and production.hideFromMenu == true then
+					if production.hideFromMenu ~= nil and production.hideFromMenu == true or production.feedMixer ~= nil then
 						goto skipProductionMixInRefreshProductionsTable
+					end
+					
+					-- im revamp ab 1.5 kann boost auch anders sein als 6, deshalb auslesen mit fallback
+					local boostNumber = 6;
+					if production.boostNumber ~= nil then
+						boostNumber = production.boostNumber;
 					end
 					
 					--ProductionInfoHud.printTable("productionPoint.owningPlaceable", productionPoint.owningPlaceable)
 						
-					for n = 1, 5 do
+					for n = 1, (boostNumber - 1) do
 						local productionItem = {}
 						productionItem.name = productionPoint.owningPlaceable:getName();
 						productionItem.fillTypeTitle = (production.name or production.id) .. " (Mix " .. n .. ")";
@@ -1019,7 +1043,7 @@ function ProductionInfoHud:refreshProductionsTable()
 									needed = true;
 									local fillLevel = productionPoint:getFillLevel(input.type);
 									local needPerHour = (production.cyclesPerHour * input.amount);
-									local hoursLeft = fillLevel / needPerHour * g_currentMission.environment.daysPerPeriod;
+									local hoursLeft = fillLevel / (needPerHour * (1 / g_currentMission.environment.daysPerPeriod));
 									productionItem.hoursLeft = productionItem.hoursLeft + hoursLeft;
 								end
 							end
@@ -1034,7 +1058,7 @@ function ProductionInfoHud:refreshProductionsTable()
 						-- jeden booster separat
 						for _, input in pairs(production.inputs) do
 							-- status 3 = läuft nicht weil ausgang voll
-							if input.mix == 6 then 
+							if input.mix == boostNumber then 
 					
 								local ignoreInput = false;
 								if productionPoint.inputFillTypeIdsIgnorePih ~= nil and productionPoint.inputFillTypeIdsIgnorePih[input.type] ~= nil then
@@ -1066,7 +1090,7 @@ function ProductionInfoHud:refreshProductionsTable()
 									if production.activeHours ~= nil then
 										productionItem.timeAdjustment = productionItem.timeAdjustment * (production.activeHours / 24)
 									end
-									productionItem.hoursLeft = productionItem.fillLevel / needPerHour * g_currentMission.environment.daysPerPeriod;
+									productionItem.hoursLeft = productionItem.fillLevel / (needPerHour * (1 / g_currentMission.environment.daysPerPeriod));
 									
 									if (needPerHour > 0) then 
 										table.insert(myProductions, productionItem)
@@ -1077,6 +1101,23 @@ function ProductionInfoHud:refreshProductionsTable()
 					end
 					
 					::skipProductionMixInRefreshProductionsTable::
+				end
+				
+				-- jetzt noch die feedmixer separat
+				for _, production in pairs(productionPoint.activeProductions) do
+					if production.feedMixer ~= nil and production.status ~= 1 then
+						local productionItem = {}
+						productionItem.name = productionPoint.owningPlaceable:getName();
+						productionItem.fillTypeTitle = (production.name or production.id) .. " (Mixer)" .. production.status;
+						productionItem.hoursLeft = 0
+						productionItem.timeAdjustment = 1;
+						productionItem.productionPoint = productionPoint;
+						productionItem.isInput = true;
+						if production.activeHours ~= nil then
+							productionItem.timeAdjustment = productionItem.timeAdjustment * (production.activeHours / 24)
+						end
+						table.insert(myProductions, productionItem)
+					end
 				end
 				
 				::ignoreProduction::
@@ -1108,7 +1149,7 @@ function ProductionInfoHud:refreshProductionsTable()
 						end
 						
 						local producableWithThisIngredient = fillLevel / ingredient.ratio;
-						local hoursLeft = producableWithThisIngredient / placeable.spec_husbandryFood.litersPerHour * g_currentMission.environment.daysPerPeriod;
+						local hoursLeft = producableWithThisIngredient / (placeable.spec_husbandryFood.litersPerHour * (1 / g_currentMission.environment.daysPerPeriod));
 						
 						local spot = feedingRobot.fillTypeToUnloadingSpot[ingredient.fillTypes[1]]
 
@@ -1165,7 +1206,7 @@ function ProductionInfoHud:refreshProductionsTable()
 
 						if (productionItem.fillLevel ~= 0) and (productionItem.needPerHour ~= 0) then
 							-- hier die anzahl der Tage pro Monat berücksichtigen
-							productionItem.hoursLeft = productionItem.fillLevel / productionItem.needPerHour * g_currentMission.environment.daysPerPeriod;
+							productionItem.hoursLeft = productionItem.fillLevel / (productionItem.needPerHour * (1 / g_currentMission.environment.daysPerPeriod));
 						end
 							
 						if (productionItem.needPerHour > 0) then 
@@ -1198,7 +1239,7 @@ function ProductionInfoHud:refreshProductionsTable()
 
 					if (productionItem.fillLevel ~= 0) and (productionItem.needPerHour ~= 0) then
 						-- hier die anzahl der Tage pro Monat berücksichtigen
-						productionItem.hoursLeft = productionItem.fillLevel / productionItem.needPerHour * g_currentMission.environment.daysPerPeriod;
+						productionItem.hoursLeft = productionItem.fillLevel / (productionItem.needPerHour * (1 / g_currentMission.environment.daysPerPeriod));
 					end
 						
 					if (productionItem.needPerHour > 0) then 
@@ -1623,7 +1664,7 @@ function ProductionInfoHud:draw()
 				skip = true;
 			end
 			if productionData.hoursLeft ~= nil then
-				local compareValue = 48 * g_currentMission.environment.daysPerPeriod;
+				local compareValue = ProductionInfoHud.settings["display"]["maxDays"] * 24;
 				if productionData.timeAdjustment ~= nil then
 					compareValue = compareValue * productionData.timeAdjustment
 				end
@@ -1859,6 +1900,9 @@ function ProductionInfoHud:SaveSettings()
 	local xmlTag = ("ProductionInfoHudSettings.display.maxLines(%d)"):format(0);
 	setXMLInt(XML, xmlTag.."#int", ProductionInfoHud.settings["display"]["maxLines"])
 
+	local xmlTag = ("ProductionInfoHudSettings.display.maxDays(%d)"):format(0);
+	setXMLInt(XML, xmlTag.."#int", ProductionInfoHud.settings["display"]["maxDays"])
+
 	local xmlTag = ("ProductionInfoHudSettings.display.maxSellingLines(%d)"):format(0);
 	setXMLInt(XML, xmlTag.."#int", ProductionInfoHud.settings["display"]["maxSellingLines"])
 
@@ -1903,6 +1947,10 @@ function ProductionInfoHud:LoadSettings()
 	xmlTag = ("ProductionInfoHudSettings.display.maxLines(%d)"):format(0); 
 	value = getXMLInt(XML, xmlTag.. "#int");
 	if value ~= nil then ProductionInfoHud.settings["display"]["maxLines"] = value;end;
+
+	xmlTag = ("ProductionInfoHudSettings.display.maxDays(%d)"):format(0); 
+	value = getXMLInt(XML, xmlTag.. "#int");
+	if value ~= nil then ProductionInfoHud.settings["display"]["maxDays"] = value;end;
 
 	xmlTag = ("ProductionInfoHudSettings.display.maxSellingLines(%d)"):format(0); 
 	value = getXMLInt(XML, xmlTag.. "#int");
